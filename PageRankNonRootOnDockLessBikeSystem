@@ -1,0 +1,155 @@
+# coding:utf-8
+import pandas as pd
+import numpy as np
+from mapGrid import getGridID
+import csv
+from contextlib import nullcontext
+
+def PageRank(M, alpha, root):
+    """
+    Personal Rank in matrix formation
+    :param M: transfer probability matrix
+    :param index2node: index2node dictionary
+    :param node2index: node2index dictionary
+    :return:type of list of tuple, ex.
+    [(node1, prob1),(node2, prob2),...]
+    """
+    result = []
+    n = len(M)
+    v = np.zeros(n)
+    v[node2index[root]] = 1
+    while np.sum(abs(v - (alpha*np.matmul(M,v) + (1-alpha)*v))) > 0.0001:
+        v = alpha * np.matmul(M, v) + (1-alpha)*v
+    for ind, prob in enumerate(v):
+        result.append((index2node[ind], prob))
+    result = sorted(result, key=lambda x:x[1], reverse=True)[:num_candidates]
+    return result
+
+def Generate_Transfer_Matrix(G):
+    """generate transfer matrix given graph"""
+    index2node = dict()
+    node2index = dict()
+    for index,node in enumerate(G.keys()):
+        node2index[node] = index
+        index2node[index] = node
+    # num of nodes
+    n = len(node2index)
+    # generate Transfer probability matrix M, shape of (n,n)
+    M = np.zeros([n,n])
+    for node1 in G.keys():
+        for node2 in G[node1]:
+            # FIXME: some nodes not in the Graphs.keys, may incur some errors
+            try:
+                M[node2index[node2],node2index[node1]] = 1/len(G[node1])
+            except:
+                continue
+    return M, node2index, index2node
+def getDay( time ):
+
+    intTime = 10 * int(time[8]) + int(time[9])
+
+    return intTime
+
+#time  = '2017-05-14 22:16:50'
+def getTime( time ):
+
+    intTime = 10 * int(time[11]) + int(time[12])
+
+    return intTime
+
+def getDegreeFromFlowResult( setHour):
+    dailyCsvAdd = '/Users/xenorock/Desktop/MasterThesis/FinalResult.csv'
+
+    #request data / History
+    bikeFlow = pd.read_csv( dailyCsvAdd )
+
+    flowDict = {}
+
+    for i in range( 0, 10000):
+        flowDict[str(i)] = {}
+
+    # 0 ~ 1079659 J in 24 hours
+    for i in range (0 ,1079660):
+        
+        searchTime = bikeFlow.at[ i, 'starttime' ]
+
+        time = getDay( searchTime )
+
+        hour  = getTime( searchTime )
+        
+        if( hour == setHour):
+
+            startLatitude = bikeFlow.at[ i, 'StartLatitude']
+
+            startLongitude = bikeFlow.at[ i, 'StartLongitude']
+            
+            endLatitude = bikeFlow.at[ i, 'EndLatitude']
+
+            endLongitude = bikeFlow.at[ i, 'EndLongitude']
+
+            rentGridID = getGridID( startLongitude, startLatitude )
+
+            returnGridID = getGridID( endLongitude, endLatitude )
+
+            if( str(returnGridID) in flowDict[str(rentGridID)] ):
+                flowDict[str(rentGridID)][str(returnGridID)] += 1
+                flowDict[str(returnGridID)][str(rentGridID)] += 1
+            else:
+                flowDict[str(rentGridID)][str(returnGridID)] = 1
+                flowDict[str(returnGridID)][str(rentGridID)] = 1
+
+    return flowDict
+
+if __name__ == '__main__':
+    ''''''
+    alpha = 0.85
+    num_iter = 100000
+    num_candidates = 10000
+    root = '5732'
+    gridFlowAdd = '/Users/xenorock/Desktop/MasterThesis/DailyAvgBikeData.csv'
+    gridFlow = pd.read_csv( gridFlowAdd )
+
+    gridInitAdd = '/Users/xenorock/Desktop/MasterThesis/GridInfo.csv'
+    gridRank = pd.read_csv( gridInitAdd )
+
+    for setHour in range( 0, 24 ):
+        print("This Hour is : ", setHour)
+        '''
+        maxFlow = 0.0
+        maxGrid = 0
+        for i in range(0,10000):
+            if (gridFlow.at[ 0 , str(i)]> maxFlow):
+                maxFlow = gridFlow.at[ setHour + 24 , str(i)]
+                maxGrid = i
+        root = str(maxGrid)
+        '''
+        G = getDegreeFromFlowResult( setHour )
+        
+        #print(G)
+        M, node2index, index2node = Generate_Transfer_Matrix(G)
+        
+        # print transfer matrix
+        #print(pd.DataFrame(M, index=G.keys(), columns=G.keys()))
+        
+        result = PageRank(M, alpha, root)
+        
+        # print results
+        #print( type(result[9999]) )
+        for i in range(0,5):
+            print( result[i][0],result[i][1] )
+
+        ''''''
+        fixedRank =0
+        for i in range(0,10000):
+            if(result[i][1] == 0 and fixedRank == 0):
+                fixedRank = i
+            if(result[i][1] == 0 and fixedRank != 0):
+                gridRank.at[ setHour, str( result[i][0] ) ] = fixedRank
+            else:
+                gridRank.at[ setHour, str( result[i][0] ) ] = i
+        
+    print ( gridRank )
+    gridRank.to_csv("GridPageRanking.csv")
+    #print("Write Ranking Csv Done")
+    
+    
